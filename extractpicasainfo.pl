@@ -142,7 +142,6 @@ my $gDateZero = DateTime->new(year  => 1899,
 #            - processAlbums
 #            - processContacts
 #            - processIniFile
-#            - processIniFileForContacts
 #            - removeLineEndings
 #            - updateContactReferenceCount
 #       - Data Preservation
@@ -468,12 +467,10 @@ sub decodeFaceTagRectangle
 #    { xCoord => 0, yCoord => 0, width => 0, height => 0 }
 #
 # In order to determine the name of the person associated with each face tag,
-# this function relies on a hash of album contacts keyed on the Picasa IDs as
-# shown below:
+# this function relies on a global hash of all Picasa contacts as shown below:
 #
-#    {
-#       'aa95109fb609ca34' => 'Alazhar Shamshuddin',
-#       '9928f1dc983ded75' => 'Maxwell Vincent'
+#    { 'Alazhar Shamshuddin' =>  { 'aa95109fb609ca34' => { 'count' : 0 } },
+#      'Maxwell Vincent'     =>  { '9928f1dc983ded75' => { 'count' : 0 } }
 #    }
 #
 # If all goes well, this function will return a reference to hash containing
@@ -493,12 +490,17 @@ sub decodeFaceTagRectangle
 #         'height' => 757
 #    }
 #
-# \param $_[0] [in] A string representing one or more encoded face tags.
-# \param $_[1] [in] The absolute path to the image file containing the encoded
-#                   face tags.
-# \param $_[2] [in] A reference to a hash of contacts keyed on Picasa IDs.
-# \param $_[3] [in] A reference to a hash of all Picasa contacts keyed on the
-#                   contact's name.
+# It will also increment the count (depicting the number of pictures each
+# contact is in) in the global Picasa contact hash and the local contact
+# hash for the album.
+#
+# \param $_[0] [in]     A string representing one or more encoded face tags.
+# \param $_[1] [in]     The absolute path to the image file containing the
+#                       encoded face tags.
+# \param $_[2] [in-out] A reference to a hash of contacts for the album keyed
+#                       on the contact's name.
+# \param $_[3] [in-out] A reference to a hash of all Picasa contacts keyed on
+#                       the contact's name.
 #
 # \return A reference to a hash of face tags as described above.
 #-------------------------------------------------------------------------------
@@ -537,15 +539,6 @@ sub decodeFaceTags
             # Ignore these invalid contacts.
             next;
          }
-         elsif ($albumContacts_hr->{$contactId})
-         {
-            my $contactName = $albumContacts_hr->{$contactId};
-
-            $faceTags{$contactName} =
-               decodeFaceTagRectangle($encodedTagCoordinates,
-                                      $imageInfo->{ImageWidth},
-                                      $imageInfo->{ImageHeight});
-         }
          else
          {
             my $contactName = getContactName($contactId, $picasaContacts_hr);
@@ -556,10 +549,16 @@ sub decodeFaceTags
                   decodeFaceTagRectangle($encodedTagCoordinates,
                                          $imageInfo->{ImageWidth},
                                          $imageInfo->{ImageHeight});
+
+               updateContactReferenceCount(
+                  $contactName, $contactId, $picasaContacts_hr);
+
+               updateContactReferenceCount(
+                  $contactName, $contactId, $albumContacts_hr);
             }
             else
             {
-               $gLogger->error("Cannot find '$contactId' in the album  " .
+               $gLogger->error("Cannot find '$contactId' in the album " .
                                "contacts or the global Picasa contact list " .
                                "for image '$imageFile'.");
             }
@@ -715,10 +714,8 @@ sub getContactName
 #          'directory'   => '/cygdrive/d/Alazhar/Development/project...',
 #          'category'    => 'Enjoying'
 #          'contacts'    => {
-#             'aa95109fb609ca34' => 'Alazhar Shamshuddin',
-#             '8b98217573da0b24' => 'Muffadal Shamshuddin',
-#             '7a4639baa2923323' => 'Sambo Chhay',
-#             '9928f1dc983ded75' => 'Maxwell Vincent'
+#             'Alazhar Shamshuddin' => { 'aa95109fb609ca34' => { 'count' : 15 } },
+#             'Muffadal Shamshuddin' => { '8b98217573da0b24' => { 'count' : 15 } },
 #          },
 #          'files' => {
 #             'Maxwell_Dinner_0003.jpg' => {
@@ -866,9 +863,9 @@ sub processContacts
          if ($contacts_hr->{$name})
          {
             $gLogger->info(
-               "The contact '$name' already exists in Picasa with ID " .
-               "'$contacts_hr->{$name}'.  The contact record with ID '$id' " .
-               "will still be processed.");
+               "The contact '$name' already exists in Picasa with another " .
+               "ID'.  The contact record with ID '$id' will still be " .
+               "processed.");
          }
 
          $contacts_hr->{$name}->{$id}->{'count'} =  0;
@@ -895,10 +892,8 @@ sub processContacts
 #       'directory'   => '/cygdrive/d/Alazhar/Development/project...',
 #       'category'    => 'Enjoying'
 #       'contacts'    => {
-#          'aa95109fb609ca34' => 'Alazhar Shamshuddin',
-#          '8b98217573da0b24' => 'Muffadal Shamshuddin',
-#          '7a4639baa2923323' => 'Sambo Chhay',
-#          '9928f1dc983ded75' => 'Maxwell Vincent'
+#          'Alazhar Shamshuddin' => { 'aa95109fb609ca34' => { 'count' : 15 } },
+#          'Muffadal Shamshuddin' => { '8b98217573da0b24' => { 'count' : 15 } },
 #       },
 #       'files' => {
 #          'Maxwell_Dinner_0003.jpg' => {
@@ -942,13 +937,12 @@ sub processIniFile
    # Reset the album hash because it is an out variable.
    %$album_hr = ();
 
+   # A contacts hash to track contacts referenced in this album.
+   my %contacts = ();
+
    # Get the absolute path to the album directory (which is the folder in
    # which the picasa.ini file lives).
    my ($albumVolume, $albumDir, $tmpFile) = File::Spec->splitpath($iniFile);
-
-   # Process the INI file for contacts information first as this information
-   # is required in the second read of the file.
-   processIniFileForContacts($iniFile, $contacts_hr, $album_hr);
 
    # Process the INI file for everything else other than contacts.
    open(my $iniFile_fh, '<', $iniFile) or
@@ -973,6 +967,7 @@ sub processIniFile
             $album_hr->{name} = $1;
             $album_hr->{category} = getAlbumCategory($1);
             $album_hr->{directory} = $albumDir;
+            $album_hr->{contacts} = \%contacts;
          }
          elsif ($line =~ m!^date=(.*)$!)
          {
@@ -1053,16 +1048,15 @@ sub processIniFile
              $section =~ m!\.album:[A-F0-9]+!i)
       {
          # Ignore these sections.  We don't care about:
-         #    - The contacts2 section because we already processed it in the
-         #      first pass of the picasa.ini file; see
-         #      processIniFileForContacts().
+         #    - The contacts2 section of a picasa.ini file is not accurate --
+         #      it contains duplicate entries and references to old contact
+         #      names that have since been changed.
          #    - The text encoding. It's not used in later versions Picasa.
          #    - Sections associated with files named like 'x-008.jpg' or
          #      'foo.wmv" as they are remnants of old file names before the
          #      folder/album was finalized with the proper naming conventions.
-         #    - .album sections.  We don't actually know Picasa uses these
-         #      sections but they are unlikely to contain any information we
-         #      want.
+         #    - .album sections.  We don't know if Picasa uses these sections
+         #      but they are unlikely to contain any information we want.
          next;
       }
       elsif ($section =~ m!([a-z].+\.[a-z]{3})!i)
@@ -1086,58 +1080,6 @@ sub processIniFile
       else
       {
          $gLogger->warn("Unknown section '$section' in '$iniFile'.");
-      }
-   }
-
-   close($iniFile_fh);
-}
-
-#-------------------------------------------------------------------------------
-# Processes the specified directory and all its subdirectories.
-#
-# \param $_[0] [in]     The absolute path to the album's picasa.ini file.
-# \param $_[1] [in_out] A reference to a hash that contains Picasa contacts
-#                       for all albums (not just his album).
-# \param $_[2] [in-out] A reference to a hash that will contain the details of
-#                       this INI file or photo album.
-#
-# \return None.
-#-------------------------------------------------------------------------------
-sub processIniFileForContacts
-{
-   my $iniFile     = $_[0];
-   my $contacts_hr = $_[1];
-   my $album_hr    = $_[2];
-
-   open(my $iniFile_fh, '<', $iniFile) or
-      $gLogger->logdie("Cannot open '$iniFile': $!");
-
-   my $section = undef;
-
-   while (<$iniFile_fh>)
-   {
-      my $line = removeLineEndings($_);
-
-      if($line=~ m!^\[(.*)\]$!)
-      {
-         $section = $1;
-      }
-
-      if ($section eq 'Contacts2')
-      {
-         if ($line=~ m!^(.*)=(.*);;$!)
-         {
-            my $id = $1;
-            my $name = $2;
-
-            $album_hr->{contacts}->{$id} = $name;
-
-            updateContactReferenceCount($name, $id, $contacts_hr);
-         }
-      }
-      else
-      {
-         next;
       }
    }
 
@@ -1200,7 +1142,7 @@ sub updateContactReferenceCount
    }
    else
    {
-      $gLogger->warn(
+      $gLogger->info(
             "The contact '$name' does not exist in the Picasa contacts " .
             "file.  Adding contact record with ID '$id' and continuing " .
             "processing.");

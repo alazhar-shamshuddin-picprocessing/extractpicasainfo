@@ -62,15 +62,24 @@ are ignored.
 The program requires:
 
    1. The Picasa contacts list which is assumed to be located at
-      %USERPROFILE%/AppData/Local/Google/Picasa2/contacts/contacts.xml.  The
-      program will abort if cannot open that file.
+      %USERPROFILE%/AppData/Local/Google/Picasa2/contacts/contacts.xml or
+      $USERPROFILE/AppData/Local/Google/Picasa2/contacts/contacts.xml, 
+      depending on whether you are running the script from Windows or the
+      Windows Subsystem for Linux (WSL).  The script will abort if it cannot
+      that file.
+
+      If you're running the script in the WSL, ensure you have a Windows 
+      environment variable called "WSLENV" set to "USERPROFILE/p:<othervars>".
+      This ensures Windows will share the %USERPROFILE% environment variable
+      (along with other variables, if any) with WSL and format the path to be
+      compatible (i.e., /mnt/c/Users/... instead of C:/Users/...).
 
    2. Image files referenced in a picasa.ini file exist in the same folder
       to successfully extract face tag information.  (The program reads
       a referenced image file's EXIF metadata to determine its height and
       width, which in turn are used to determine the coordinates of the
-      tagged region.  The face tag region is be set to zeros and an error
-      is logged if an image file does not exist.)
+      tagged region.  The face tag region is set to zeros and an error is
+      logged if an image file does not exist.)
 
 To view the SQLite database file produced by this program, use the "DB Browser
 for SQLite" application available at https://sqlitebrowser.org.
@@ -107,7 +116,6 @@ use POSIX;                       # For math functions like floor.
 ################################################################################
 # Global Variables
 ################################################################################
-
 use constant TRUE  => 1;
 use constant FALSE => 0;
 
@@ -477,17 +485,18 @@ sub decodeFaceTagRectangle
 # the decoded face tag information like the example shown below:
 #
 #    {
-#       'Muffadal Shamshuddin' => {
-#          'xCoord' => 0,
-#          'yCoord' => 3275,
-#          'width' => 756,
-#          'height' => 757
-#       },
 #       'Alazhar Shamshuddin' => {
 #         'xCoord' => 1104,
 #         'yCoord' => 3275,
 #         'width' => 757,
 #         'height' => 757
+#       },   
+#       'Maxwell Vincent' => {
+#          'xCoord' => 0,
+#          'yCoord' => 3275,
+#          'width' => 756,
+#          'height' => 757
+#       }
 #    }
 #
 # It will also increment the count (depicting the number of pictures each
@@ -576,21 +585,20 @@ sub decodeFaceTags
 #-------------------------------------------------------------------------------
 # Get an album category associated with the specified album name.
 #
-# This method attempts to enable us to leverage categorization of albums in
-# future photo management systems even though that feature does not exist in
-# Picasa.  To that end, it is crude -- we attempt to determine a suitable
+# This method attempts to help us categorize albums in a future photo
+# management systems.  To that end, it is crude -- we determine a suitable
 # category based on the first word in our album's name.
 #
 # Our albums must map to one of the following categories:
 #    - Biking
 #    - Camping
-#    - Hiking
-#    - Kayaking
-#    - Snowboarding
 #    - Celebrating
 #    - Enjoying
 #    - Exploring
+#    - Hiking
+#    - Kayaking
 #    - Living
+#    - Snowboarding
 #    - Working
 #    - Unknown
 #
@@ -709,7 +717,7 @@ sub getContactName
 #       '1' => {
 #          'date'        => '20190105',
 #          'name'        => '2019_01_05 - Dining with Maxwell Vincent',
-#          'location'    => 'Port Moody, BC, Canad=>',
+#          'location'    => 'Port Moody, BC, Canada',
 #          'description' => 'This was another wonderful (vegetarian)...',
 #          'directory'   => '/cygdrive/d/Alazhar/Development/project...',
 #          'category'    => 'Enjoying'
@@ -887,7 +895,7 @@ sub processContacts
 #    {
 #       'date'        => '20190105',
 #       'name'        => '2019_01_05 - Dining with Maxwell Vincent',
-#       'location'    => 'Port Moody, BC, Canad=>',
+#       'location'    => 'Port Moody, BC, Canada',
 #       'description' => 'This was another wonderful (vegetarian)...',
 #       'directory'   => '/cygdrive/d/Alazhar/Development/project...',
 #       'category'    => 'Enjoying'
@@ -1024,8 +1032,8 @@ sub processIniFile
             #      later versions of Picasa.
             #    - backuphash likely refers to the original file in the
             #      .picasaoriginals folder that we don't care about.
-            #    - IIDLIST_* identifies Google account with which this album
-            #      was uploaded to Picasa Web.
+            #    - IIDLIST_* identifies the Google account with which this
+            #      album was uploaded to Picasa Web.
             #    - redo, rotate, and moddate probably identify how and when the
             #      original file was changed.
             next;
@@ -1268,7 +1276,7 @@ sub executeStatement
 # This function works around SQLite's shortcoming: it doesn't support new line
 # characters (or other escaped white space annotations) in strings.  This
 # method, however kludgey, is the only way we know how to preserve new line
-# in our album descriptions.
+# characters in our album descriptions.
 #
 # \param $_[1] [in] The database handle.
 # \param $_[1] [in] The album ID or key whose description we want to populate.

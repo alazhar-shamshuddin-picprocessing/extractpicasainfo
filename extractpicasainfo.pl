@@ -630,17 +630,24 @@ sub getAlbumCategory
                       Burying      => 'Living',
                       Fighting     => 'Living',
                       Recovering   => 'Living',
-                      Styling      => 'Living',
+                      Setting      => 'Living',
                       Enjoying     => 'Enjoying',
                       BBQing       => 'Enjoying',
                       Bungee       => 'Enjoying',
+                      Cooking      => 'Enjoying',
+                      Clubbing     => 'Enjoying',
                       Dining       => 'Enjoying',
                       Eating       => 'Enjoying',
                       Golfing      => 'Enjoying',
                       Paddle       => 'Enjoying',
+                      Picnicking   => 'Enjoying',
                       Paragliding  => 'Enjoying',
                       Playing      => 'Enjoying',
-                      Runing       => 'Enjoying',
+                      Rafting      => 'Enjoying',
+                      Running      => 'Enjoying',
+                      Shopping     => 'Enjoying',
+                      Skiing       => 'Enjoying',
+                      Styling      => 'Enjoying',
                       Go           => 'Working',
                       Leaving      => 'Working',
                       Working      => 'Working');
@@ -991,7 +998,7 @@ sub processIniFile
             $album_hr->{description} = $1;
          }
       }
-      elsif ($section =~ m!([A-Z].+_\d{4}\.[a-z|4]{3})!)
+      elsif ($section =~ m!^([A-Z].+_\d{4}\.[a-z|4]{3})$!)
       {
          my $file = $1;
 
